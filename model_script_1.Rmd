@@ -1,0 +1,299 @@
+---
+title: "linear model and extrapolation script 1"
+output: html_notebook
+
+# Install the following packages
+
+---
+```{r}
+install.packages("raster")
+install.packages("maptools")
+install.packages("robustbase")
+install.packages("doParallel")
+install.packages("foreach")
+install.packages("robust")
+install.packages("caTools")
+library(raster)
+library(maptools)
+library(robustbase)
+library(doParallel)
+library(foreach)
+library(robust)
+library(caTools)
+library(rgdal)
+library(data.table)
+
+
+```
+<!-- the user needs to provide a dataset of daily stream flow data in the following structure - and stored in RData format -->
+
+<!--           # Station.Name       date discharge longitude latitude      date3 -->
+<!--  19521723          131 16.07.1950      5.25  7.345833 49.70417 1950-07-16 -->
+<!--  19521731          131 17.07.1950      3.77  7.345833 49.70417 1950-07-17 -->
+<!--  19521840          131 04.10.1950     11.50  7.345833 49.70417 1950-10-04 -->
+<!--  19521932          131 11.07.1950      2.80  7.345833 49.70417 1950-07-11 -->
+<!--  19522089          131 26.10.1950      3.98  7.345833 49.70417 1950-10-26 -->
+<!--  19522131          131 24.10.1950      3.00  7.345833 49.70417 1950-10-24 -->
+<!--           day_val month_val year_val      date2 -->
+<!--  19521723      16         7     1950 1950-07-16 -->
+<!--  19521731      17         7     1950 1950-07-17 -->
+<!--  19521840       4        10     1950 1950-10-04 -->
+<!--  19521932      11         7     1950 1950-07-11 -->
+<!--  19522089      26        10     1950 1950-10-26 -->
+<!--  19522131      24        10     1950 1950-10-24 -->
+ 
+<!-- Add directory below and set working directory (where data is stored) -->
+ 
+```{r}
+path <- "/your/directory/here/" ## - add own directory here
+setwd(path) ## set working directory 
+getwd()
+```
+<!-- load gauging data -->
+
+```{r}
+## load dataframe with gauging data
+load(file="your_data.Rdata") 
+
+
+## format as data frame
+data<-as.data.frame(data1)
+```
+<!-- upload monthly precipitation rasters - download from http://www.earthenv.org/streams -->
+
+```{r}
+r1= raster(paste0(path, "prec_sum_01.tif"))
+r2= raster(paste0(path,"prec_sum_02.tif"))
+r3= raster(paste0(path,"prec_sum_03.tif"))
+r4= raster(paste0(path,"prec_sum_04.tif"))
+r5= raster(paste0(path,"prec_sum_05.tif"))
+r6= raster(paste0(path,"prec_sum_06.tif"))
+r7= raster(paste0(path,"prec_sum_07.tif"))
+r8= raster(paste0(path,"prec_sum_08.tif"))
+r9= raster(paste0(path,"prec_sum_09.tif"))
+r10= raster(paste0(path,"prec_sum_10.tif"))
+r11= raster(paste0(path,"prec_sum_11.tif"))
+r12= raster(paste0(path,"prec_sum_12.tif"))
+```
+
+<!-- create seasonal precipitation from monhly mean and change name of rasters -->
+
+```{r}
+winter=(r12+r1+r2)/3
+spring=(r3+r4+r5)/3
+summer=(r6+r7+r8)/3
+fall=(r9+r10+r11)/3
+
+names(winter)="winter"
+names(spring)="spring"
+names(summer)="summer"
+names(fall)="fall"
+```
+<!-- merge rasters  -->
+
+```{r}
+seasons=stack(winter, spring, summer, fall)
+ 
+```
+
+<!-- mask rasters to study area -->
+
+```{r}
+de <- rgdal::readOGR("study_are.shp") ## shape file of study area
+proj4string(de)=proj4string(seasons) ## ensure same coordinate system as raster file
+
+```
+<!-- create dataframe of raster precipitaion for study area  -->
+```{r}
+dis_daily_pre_de<-as.data.frame(seasons,xy=T, na.rm=T)
+```
+
+<!-- extract data from raster into gauges dataframe -->
+
+```{r}
+data_s=data
+coordinates(data_s)=c("longitude", "latitude") ## define coords
+data_s=extract(seasons, data_s, sp=T) ## extract data
+head(data_s)
+```
+
+
+<!-- add season column to gauging data -->
+
+```{r}
+data_s$season <-ifelse(data_s$month_val >= 12 | data_s$month_val < 3, "winter",
+                  ifelse(data_s$month_val > 2 & data_s$month_val < 6, "spring",
+                    ifelse(data_s$month_val > 5 & data_s$month_val < 9, "summer", "fall")))
+```
+
+<!-- format into dataframe -->
+```{r}
+data_s_de=as.data.frame(data_s)
+```
+
+
+<!-- define years of dataset, e.g. 1950-2013 -->
+
+```{r}
+uniq_y <- sort(unique(unlist(data_s_de$year_val))) ## sort by date
+uniq_y
+```
+
+
+<!-- define seasons to loop round -->
+
+ 
+```{r}
+uniq_s <- unique(data_s_de$season)
+uniq_s
+```
+
+
+<!--  the dataframe should now look like the following - -->
+
+<!--        Station.Name       date discharge      date3 day_val month_val year_val -->
+<!--  87440          131 1950-08-16      1290 1950-08-16      16         8     1950 -->
+<!--  87441          131 1950-08-17      1280 1950-08-17      17         8     1950 -->
+<!--  87442          131 1950-08-18      1260 1950-08-18      18         8     1950 -->
+<!--  87443          131 1950-08-19      1240 1950-08-19      19         8     1950 -->
+<!--  87444          131 1950-08-20      1220 1950-08-20      20         8     1950 -->
+<!--  87445          131 1950-08-21      1210 1950-08-21      21         8     1950 -->
+<!--             date2   winter   spring   summer     fall season -->
+<!--  87440 1950-08-16 18696537 19072192 25314726 19234833 summer -->
+<!--  87441 1950-08-17 18696537 19072192 25314726 19234833 summer -->
+<!--  87442 1950-08-18 18696537 19072192 25314726 19234833 summer -->
+<!--  87443 1950-08-19 18696537 19072192 25314726 19234833 summer -->
+<!--  87444 1950-08-20 18696537 19072192 25314726 19234833 summer -->
+<!--  87445 1950-08-21 18696537 19072192 25314726 19234833 summer -->
+
+<!-- set directory for saving the predictions -->
+
+```{r}
+setwd("/your/directory")
+```
+<!-- model loop with parallel processing -->
+
+```{r}
+cl <- makePSOCKcluster(10, outfile="")
+registerDoParallel(cl)
+getDoParWorkers()
+
+### loop takes year first then seasons within that year. Each season is then saved separately
+
+foreach(y=1:length(uniq_y), .packages=c("robust", "raster")) %dopar% { ### foreach loop for parallel
+  # for (y in 1:length(uniq_y)){ ## for each loop for no parallel
+
+
+  yx <- paste(uniq_y[y]) ## select year i.e. 1950
+ 
+  data_y <- droplevels(subset(data_s_de, year_val == yx)) # subset data by year selected above
+ 
+ 
+
+      for (s in 1:length(uniq_s)) {
+
+          cof <- data.frame(matrix(nrow=0,ncol=10)) ## create dataframe to store coefficients
+          
+          dis_daily=na.omit(dis_daily_pre_de) ## remove nas from precipitation dataframe
+  
+          sx <- paste(uniq_s[s]) ## select season
+
+          data_se <- droplevels(subset(data_y, season == sx)) ## subset season
+
+          uniq <- sort(unique(unlist(data_se$date3))) ## create list of dates
+ 
+
+
+ 
+  
+                    for (i in 1:length(uniq)) {
+
+
+              
+            dx <- paste(as.factor(uniq[i])) ## define date
+            data_1 <- droplevels(subset(data_se, date3 == dx)) ### subset data from that date 
+            data_1 <- na.omit(data_1) # remove NAs
+
+   
+            ## define seasonal data. make sure data name matches precipitation raster for extrapolation
+            
+   
+           	if (uniq_s[s] == "winter") {winter <- data_1$winter}
+            if (uniq_s[s] == "spring") {spring <- data_1$spring}
+            if (uniq_s[s] == "summer") {summer <- data_1$summer}
+            if (uniq_s[s] == "fall")   {fall <- data_1$fall}
+
+            ## controls for model
+
+            my.control<-lmRob.control(mxf=100, mxr=100)
+
+            ## robust model to calculate weights
+
+            if (uniq_s[s] == "winter") { lmx2 <- robust::lmRob(data_1$discharge ~ winter, control=my.control)}
+            if (uniq_s[s] == "spring") { lmx2 <- robust::lmRob(data_1$discharge ~ spring, control=my.control)}
+            if (uniq_s[s] == "summer") { lmx2 <- robust::lmRob(data_1$discharge ~ summer, control=my.control) }
+            if (uniq_s[s] == "fall") { lmx2 <- robust::lmRob(data_1$discharge ~ fall, control=my.control)}
+
+            ## linear regression with weights
+
+            if (uniq_s[s] == "winter") { lmx <- lm(data_1$discharge~ winter, weights = lmx2$M.weights)}
+            if (uniq_s[s] == "spring") { lmx <- lm(data_1$discharge~ spring, weights = lmx2$M.weights)}
+            if (uniq_s[s] == "summer") { lmx <- lm(data_1$discharge~ summer, weights = lmx2$M.weights) }
+            if (uniq_s[s] == "fall") { lmx <- lm(data_1$discharge~ fall, weights = lmx2$M.weights)}
+
+       ## coefficients of model
+        
+    cof[i,1]<- unlist(summary(lmx))$coefficients2 ## slope
+    cof[i,2]<- unlist(summary(lmx))$coefficients1 ## intercept 
+    cof[i,3]<- unlist(summary(lmx))$r.squared ## extract R squared value
+    cof[i,4]<- summary(lmx)$coefficients[3] ## standard error of model (lmx)
+    cof[i,5]<- nrow(data_1) ## no of stations
+    cof[i,6]<-summary(lmx)$coefficients[5] ## t value
+    cof[i,7]<- df.residual(lmx) +1 ## degrees of freedom
+
+    cof[i,8]<-data_1$day_val[1] # day
+    cof[i,9]<-data_1$month_val[1] ## month
+    cof[i,10]<-data_1$year_val[1] ## year
+
+   
+    	### prediction and extrapolation. newdata should be precipitation dataframe from raster file
+
+      
+      flacc_predx <- predict.lm(lmx, newdata = dis_daily_pre_de , se.fit = T, interval = "confidence", level = 0.05) ## extrapolation
+     
+      disx<- as.data.frame(flacc_predx[1]) ## put predictions into dataframe
+      
+     
+      disx<-disx[,1] ## extract estimated discharge
+     
+
+      
+      
+      dis_daily <- cbind(dis_daily, disx)## combine precipitation dataframe with new data just predicted
+      datex <- paste(as.vector(droplevels(uniq[i]))) ## date for column name
+      colnames(dis_daily)[6+ i] <- datex ### add date as column name
+      # head(dis_daily)
+                         }
+         
+
+  
+  
+  ## column names of coefficients dataframe - update
+  colnames(cof)<-c("slope","intercept", "r2", "SE", "stations", "t-value", "degrees_of_freedom", "day","month","year")
+  
+  ## save coefficients
+  save(cof, file= paste("extrap_coef_", uniq_s[s],"_",uniq_y[y], "_S_precip_de_lm_weights", ".RData", sep = ""))
+  ## save discharge predictions
+  save(dis_daily, file = paste("predicted_discharge_", uniq_s[s], "_", uniq_y[y], "_S_precip_de_lm_weights", ".RData", sep = ""))
+ 
+  ## remove dataframes. saves each season within each year as a separate file
+  rm(cof, dis_daily)
+  gc()
+  
+    }
+
+}  
+
+stopCluster(cl) ## stops parallels
+```
+
