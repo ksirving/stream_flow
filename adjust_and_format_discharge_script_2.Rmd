@@ -1,0 +1,447 @@
+---
+title: "Adjust negatives and format data for metrics from data frame format- Script 2"
+output: html_notebook
+---
+
+<!-- Please download and reference IHA metrics from https://github.com/USGS-R/EflowStats --> 
+
+
+install R packages
+
+```{r}
+install.packages("data.table")
+library(data.table)
+```
+
+
+<!-- set working directory where data is stored -->
+
+```{r}
+path <- "/your/directory/here/" ## add own directory here (where data is stored)
+setwd(path) ## set wd 
+getwd()
+```
+<!-- upload and merge data frames of stream flow -->
+
+```{r}
+# make list of files
+pred_list <- list.files(pattern = "predicted_discharge")
+
+pred_list
+
+s=1 ## define s (first file in list)
+
+## upload first file
+
+load(paste(path, pred_list[s], sep = "/")) ## name = dis_daily
+dis_daily[1:10,1:10] ## check data
+
+
+### columns as dates
+
+#            x        y winter   spring    summer      fall   1950-09-01
+# 20176 8.845833 54.90417   8252 6653.333 10140.000 12101.000  0.9600148
+# 20179 8.870833 54.90417   6764 5461.667  8306.000  9908.333  0.8959178
+# 20180 8.879167 54.90417   6640 5362.333  8153.333  9725.000  0.8905585
+# 20181 8.887500 54.90417   6516 5262.667  8000.667  9541.667  0.8851992
+# 20182 8.895833 54.90417   6392 5162.333  7848.000  9358.333  0.8798399
+# 21278 8.854167 54.89583   8066 6505.000  9912.000 11827.000  0.9520051
+
+	dis_dailyx <- dis_daily ### put into dataframe to accumulate
+
+    dis_dailyx[dis_dailyx<=0] <- NA ## change values below zero to NA
+
+    dis_dailyx[85364,] <- apply(dis_dailyx,2,min, na.rm=T) ## add minimum row
+
+```
+
+```{r}
+## loop around all files to join as one dataframe
+
+for(s in 2:length(pred_list)) {
+    
+    cat(paste(s), "\n")
+    load(paste(path, pred_list[s], sep = "/")) ## upload files one by one
+
+    dis_daily <- dis_daily[, -c(1:6)] ## remove unnecessary columns
+    dis_daily[dis_daily<=0] <- NA ## change values below zero to NA
+
+    dis_daily[85364,] <- apply(dis_daily,2,min, na.rm=T) ## add minimum row
+
+    dis_dailyx <- cbind(dis_dailyx, dis_daily) ## cumulative dataframe to combine files together
+
+  }
+
+ 
+```
+
+ <!-- this is now the full dataset with negative values replaced with NAs -->
+ 
+ 
+```{r}
+dis_dailyx[1:10, 1:10] ## check data
+sum(is.na(dis_dailyx)) ## count number of NAs
+```
+<!-- if needed, count NAs (number of negatives) in data set (not mandatory) -->
+
+```{r}
+na_count_dates <-sapply(dis_dailyx, function(y) sum(length(which(is.na(y))))) ## count NAs per column (days)
+na_count_dates <- data.frame(na_count_dates) ## put into dataframe
+
+write.csv(na_count_dates, file=paste(path,"negatives_replaced_days_all_grids.csv"))## save file
+
+```
+
+<!-- replace NAs with lowest value  -->
+
+
+```{r}
+dis_dailyx <- dis_dailyx[ , sort(names(dis_dailyx))] ## put dates (columns in order)
+
+dis_dailyx$site_id <- rownames(dis_dailyx) ## add site_id to df
+```
+
+
+<!-- check data -->
+
+```{r}
+dim(dis_dailyx)
+dis_dailyx[1:10, 365:372] 
+```
+<!-- THE INDEXED NUMBERS WILL NEED ADJUSTED ACCORDING TO THE DIMENSIONS OF THE DATASET -->
+
+<!-- create dataframe of coordinates and remove coordinates from main dataframe -->
+
+```{r}
+coords <- dis_dailyx[, c(366:372)] # make separate dataframe for coords
+
+
+dis_dailyx <- dis_dailyx[, -c(366:371)] ## make df with coords and code removed, keep site_id to merge with coords df
+```
+
+
+<!-- list of days to loop around -->
+
+```{r}
+days <- colnames(dis_dailyx[-length(colnames(dis_dailyx))])
+```
+
+```{r}
+## replace NAs with min values
+
+ for (d in 1:length(days)){
+
+  cat("Running site", d, "\n")
+
+dis_dailyx[,d][is.na(dis_dailyx[,d])] <- dis_dailyx[85364, d] 
+
+}
+```
+<!-- check that all NAs have been replaced -->
+
+```{r}
+sum(is.na(dis_dailyx)) ## check no NAs
+```
+
+<!-- merge dataframe and coordinates back together -->
+
+```{r}
+dis_dailyxx <- merge(coords, dis_dailyx, by="site_id", all=T) ## merge dataframes back together
+
+sum(is.na(dis_dailyxx)) ## check no NAs with merge
+dis_dailyx <- dis_dailyx[-c(85364),] ## remove minimum row (change row number)
+
+dis_dailyx <- dis_dailyxx
+
+
+rm(dis_dailyxx) ## remove data
+```
+<!-- format data for IHA calculation -->
+
+```{r}
+rownames(dis_dailyx) <- dis_dailyx$site_id # define row names as site_id
+
+dis_dailyx <- t(dis_dailyx)## flip the data - sites as columns and rows as days (this format needed for metrics calculation)
+dis_dailyx <- data.frame(unlist(dis_dailyx)) # change data from characters to factor
+```
+<!-- add columns needed for IHA calculations -->
+
+```{r}
+dis_daily <- dis_dailyx
+```
+
+<!-- month, day and year columns -->
+
+```{r}
+
+ dis_daily$month_val <- tstrsplit(rownames(dis_daily[-c(1:2)]), "[-]")[[2]]
+ dis_daily$year_val <- tstrsplit(rownames(dis_daily[-c(1:2)]), "[-]")[[1]]
+ dis_daily$day_val <- tstrsplit(rownames(dis_daily[-c(1:2)]), "[-]")[[3]] 
+
+ dis_daily$date <- as.Date(with(dis_daily, paste(year_val, month_val, day_val,sep="-")), "%Y-%m-%d")
+```
+
+<!-- add julian date -->
+
+```{r}
+jul <- dis_daily
+jul$date3 <- as.Date(jul$date, format="%Y-%m-%d") ## format date
+jul_x<-jul$date3[1:length(jul$date3)] ## make list of dates
+z<-as.POSIXlt(jul_x , "%Y-%m-%d") ## format to UTC
+jul_day<-yday(z) ## change date to Julian day
+jul$jul_val[1:length(jul$date)]<-jul_day ## add to df
+```
+
+
+<!-- add wy_val hydrological year -->
+
+```{r}
+## format month and year values to numbers
+jul$month_val <- as.numeric(as.character(jul$month_val))
+jul$year_val <- as.numeric(as.character(jul$year_val))
+
+jul$wy_val <- ifelse(jul$month_val <= 9, jul$year_val, jul$year_val+1) ## add wy_val column
+
+sim <- jul[-c(2:5),]
+```
+
+<!-- save data -->
+
+```{r}
+save(sim, file=paste(path, "data.Rdata"))
+```
+<!-- check data as below -->
+
+```{r}
+sim[1:10,1:4]  ## check top of data
+```
+
+
+
+<!-- # 				        X1000238     X1000250     X1000251     X1000313 --> 
+<!-- # site_id         1000238      1000250      1000251      1000313 -->
+<!-- # x             10.279167    10.379167    10.387500    10.904167 -->
+<!-- # y              47.48750     47.48750     47.48750     47.48750 -->
+<!-- # 1950-01-01    2.7348673    0.5972313    0.9104734    0.6031170 -->
+<!-- # 1950-01-02    2.8974739    0.5296329    0.8766084    0.5361524 -->
+<!-- # 1950-01-03    2.8458458    0.5106049    0.8528034    0.5170347 -->
+<!-- # 1950-01-04     1.868564     1.623070     1.659044     1.623746 -->
+<!-- # 1950-01-05     2.109678     1.845908     1.884560     1.846634 -->
+<!-- # 1950-01-06    3.5742879    1.0323595    1.4048453    1.0393584 -->
+<!-- # 1950-01-07     3.646873     1.347616     1.684541     1.353946	 -->
+
+
+```{r}
+sim[1:10,85365:85371] ## check new columns (end of data)
+```
+<!-- # 			          	X99993       X99994 month_val year_val day_val       date -->
+<!-- # site_id           99993        99994        NA       NA    <NA>       <NA> -->
+<!-- # x             13.387500    13.395833        NA       NA    <NA>       <NA> -->
+<!-- # y              54.30417     54.30417        NA       NA    <NA>       <NA> -->
+<!-- # 1950-01-01    0.5951268    0.5951268         1     1950      01 1950-01-01 -->
+<!-- # 1950-01-02    0.5273017    0.5273017         1     1950      02 1950-01-02 -->
+<!-- # 1950-01-03    0.5083059    0.5083059         1     1950      03 1950-01-03 -->
+<!-- # 1950-01-04     1.622828     1.622828         1     1950      04 1950-01-04 -->
+<!-- # 1950-01-05     1.845648     1.845648         1     1950      05 1950-01-05 -->
+<!-- # 1950-01-06    1.0298570    1.0298570         1     1950      06 1950-01-06 -->
+<!-- # 1950-01-07     1.345352     1.345352         1     1950      07 1950-01-07 -->
+<!-- #                 date3 jul_val wy_val -->
+<!-- # site_id          <NA>      NA     NA -->
+<!-- # x                <NA>      NA     NA -->
+<!-- # y                <NA>      NA     NA -->
+<!-- # 1950-01-01 1950-01-01       1   1950 -->
+<!-- # 1950-01-02 1950-01-02       2   1950 -->
+<!-- # 1950-01-03 1950-01-03       3   1950 -->
+<!-- # 1950-01-04 1950-01-04       4   1950 -->
+<!-- # 1950-01-05 1950-01-05       5   1950 -->
+<!-- # 1950-01-06 1950-01-06       6   1950 -->
+<!-- # 1950-01-07 1950-01-07       7   195 -->
+
+
+<!-- IHA metrics calculation -->
+
+<!-- please load the IHA metrics functions from EFlowstats before running the below script -->
+
+
+```{r}
+cols <- unique(names(sim[-c( 85363:85370)])) ##  define list of sites, do not include the columns: month_val, year_val, day_val, date, date3, jul_val, wy_val. the numbers will need adjusted according to the size of dataframe
+head(cols) ## check data
+tail(cols) ## check columns are removed
+```
+
+<!-- packages needed for metrics calculation -->
+
+```{r}
+install.packages("dplyr")
+install.packages("doParallel")
+install.packages("foreach")
+install.packages("zoo")
+library(dplyr)
+library(doParallel)
+library(foreach)
+library(zoo)
+```
+
+
+loop for all 53 IHA metrics
+
+
+```{r}
+cl <- makePSOCKcluster(10, outfile="")
+registerDoParallel(cl)
+getDoParWorkers()
+
+# for(s in 1:length(cols)) { ## start loop with single processing
+result <- foreach(s=1:length(cols), .combine = rbind, .packages=c("data.table", "dplyr", "zoo")) %dopar% { ## start loop for parallel processing
+
+  cat("Running site", s, "\n")
+
+	sx <- paste("^",cols[s],"$", sep="") ## define site within object
+
+  hyd_metrics <- data.frame(matrix(nrow = 0, ncol = 56)) ## define dataframe & column names
+  colnames(hyd_metrics)<-(c("site_no", "X", "Y", "dh1","dh2","dh3","dh4","dh5","dl1", "dl2", "dl3", "dl4", "dl5", "ma1", "ma2", "ma12", "ma13", "ma14", "ma15", "ma16", "ma17", "ma18", "ma19", "ma20", "ma21", "ma22", "ma23", "mh1", "mh2", "mh3", "mh4", "mh5", "mh6", "mh7", "mh8", "mh9", "mh10", "mh11", "mh12", "ra1", "ra3","ta1", "ta2","ml1","ml2","ml3","ml4","ml5","ml6","ml7","ml8","ml9","ml10","ml11","ml12","mh18"))
+
+  
+  
+  data1 <- sim[,grep(sx, colnames(sim))] ## extract discharge data for site sx
+  
+  data2 <- cbind(data1,sim[,101:107]) # 1 site data + dates etc
+ 
+
+  date <- "31.12.1950" ## last day (change to last day in data)
+  date <- as.Date(date, format="%d.%m.%Y")
+
+  data3=data2[-c(1:3),] #  remove unimportant rows
+  
+  colnames(data3)[1] <- "discharge" ## change column name to discharge
+  data3 <-data3 %>% distinct(date3, .keep_all = TRUE) ## remove duplicated dates
+  data4 <- data3[order(data3$date3),] ## order df by dates
+
+  
+
+  data4$discharge<-as.numeric(as.character(data4$discharge)) ## change format to number
+  
+  date.seq <- data.frame("date" = seq.Date((date-364), date, by="days")) ## define dates sequence 01/01/1050 - 31/12/2013
+
+  data5 <- na.omit(data4) ## remove NAs
+    
+  hyd_metrics[s,1] <- cols[s] ## site no
+  hyd_metrics[s,2] <- as.numeric(as.character(data2[2,1]))#tstrsplit(cols[s], "[_]")[[1]]                   
+  hyd_metrics[s,3] <- as.numeric(as.character(data2[3,1]))#tstrsplit(cols[s], "[_]")[[2]]    
+
+#### dh stats    
+
+hyd_metrics[s,4] <- try(dh1(data5, pref = "mean"), silent=TRUE)#1
+hyd_metrics[s,5] <- try(dh2(data5, pref = "mean"), silent=TRUE)#2
+hyd_metrics[s,6] <- try(dh3(data5, pref = "mean"), silent=TRUE)#3
+hyd_metrics[s,7] <- try(dh4(data5, pref = "mean"), silent=TRUE)#4
+hyd_metrics[s,8] <- try(dh5(data5, pref = "mean"), silent=TRUE)#5
+
+
+
+# # ######### DL stats
+
+hyd_metrics[s,9] <- try(dl1(data5, pref = "mean"), silent=TRUE)#6
+hyd_metrics[s,10] <- try(dl2(data5, pref = "mean"), silent=TRUE)#7
+hyd_metrics[s,11] <- try(dl3(data5, pref = "mean"), silent=TRUE)#8
+hyd_metrics[s,12] <- try(dl4(data5, pref = "mean"), silent=TRUE)#9
+hyd_metrics[s,13] <- try(dl5(data5, pref = "mean"), silent=TRUE)#10
+
+
+
+
+# ############# MA stats
+
+hyd_metrics[s,14] <- try(ma1(data5), silent=TRUE)#11
+hyd_metrics[s,15] <- try(ma2(data5), silent=TRUE)#12
+
+hyd_metrics[s,16] <- try(unlist(ma12.23(data5)), silent=TRUE)[1]#13
+hyd_metrics[s,17] <- try(unlist(ma12.23(data5)), silent=TRUE)[2]#14
+hyd_metrics[s,18] <- try(unlist(ma12.23(data5)), silent=TRUE)[3]#15
+hyd_metrics[s,19] <- try(unlist(ma12.23(data5)), silent=TRUE)[4]#16
+hyd_metrics[s,20] <- try(unlist(ma12.23(data5)), silent=TRUE)[5]#17
+hyd_metrics[s,21] <- try(unlist(ma12.23(data5)), silent=TRUE)[6]#18
+hyd_metrics[s,22] <- try(unlist(ma12.23(data5)), silent=TRUE)[7]#19
+hyd_metrics[s,23] <- try(unlist(ma12.23(data5)), silent=TRUE)[8]#20
+hyd_metrics[s,24] <- try(unlist(ma12.23(data5)), silent=TRUE)[9]#21
+hyd_metrics[s,25] <- try(unlist(ma12.23(data5)), silent=TRUE)[10]#22
+hyd_metrics[s,26] <- try(unlist(ma12.23(data5)), silent=TRUE)[11]#23
+hyd_metrics[s,27] <- try(unlist(ma12.23(data5)), silent=TRUE)[12]#24
+
+############# MH stats
+
+hyd_metrics[s,28] <- try(unlist(mh1.12(data5)), silent=TRUE)[1]#25
+hyd_metrics[s,29] <- try(unlist(mh1.12(data5)), silent=TRUE)[2]#26
+hyd_metrics[s,30] <- try(unlist(mh1.12(data5)), silent=TRUE)[3]#27
+hyd_metrics[s,31] <- try(unlist(mh1.12(data5)), silent=TRUE)[4]#28
+hyd_metrics[s,32] <- try(unlist(mh1.12(data5)), silent=TRUE)[5]#29
+hyd_metrics[s,33] <- try(unlist(mh1.12(data5)), silent=TRUE)[6]#30
+hyd_metrics[s,34] <- try(unlist(mh1.12(data5)), silent=TRUE)[7]#31
+hyd_metrics[s,35] <- try(unlist(mh1.12(data5)), silent=TRUE)[8]#32
+hyd_metrics[s,36] <- try(unlist(mh1.12(data5)), silent=TRUE)[9]#33
+hyd_metrics[s,37] <- try(unlist(mh1.12(data5)), silent=TRUE)[10]#34
+hyd_metrics[s,38] <- try(unlist(mh1.12(data5)), silent=TRUE)[11]#35
+hyd_metrics[s,39] <- try(unlist(mh1.12(data5)), silent=TRUE)[12]#36
+
+
+############# RA stats
+
+hyd_metrics[s,40] <- try(ra1(data5), silent=TRUE)#37
+hyd_metrics[s,41] <- try(ra3(data5), silent=TRUE)#38
+
+
+
+############# TA stats
+
+hyd_metrics[s,42] <- try(unlist(ta1.2(data5)), silent=TRUE)[1]#39
+hyd_metrics[s,43] <- try(unlist(ta1.2(data5)), silent=TRUE)[2]#40
+
+
+############# ml stats
+
+hyd_metrics[s,44] <- try(unlist(ml1.12(data5)), silent=TRUE)[1]#41
+hyd_metrics[s,45] <- try(unlist(ml1.12(data5)), silent=TRUE)[2]#42 
+hyd_metrics[s,46] <- try(unlist(ml1.12(data5)), silent=TRUE)[3]#43
+hyd_metrics[s,47] <- try(unlist(ml1.12(data5)), silent=TRUE)[4]#44
+hyd_metrics[s,48] <- try(unlist(ml1.12(data5)), silent=TRUE)[5]#45
+hyd_metrics[s,49] <- try(unlist(ml1.12(data5)), silent=TRUE)[6]#46
+hyd_metrics[s,50] <- try(unlist(ml1.12(data5)), silent=TRUE)[7]#47
+hyd_metrics[s,51] <- try(unlist(ml1.12(data5)), silent=TRUE)[8]#48
+hyd_metrics[s,52] <- try(unlist(ml1.12(data5)), silent=TRUE)[9]#49
+hyd_metrics[s,53] <- try(unlist(ml1.12(data5)), silent=TRUE)[10]#50
+hyd_metrics[s,54] <- try(unlist(ml1.12(data5)), silent=TRUE)[11]#51
+hyd_metrics[s,55] <- try(unlist(ml1.12(data5)), silent=TRUE)[12]#52
+
+
+###### mh stats
+
+hyd_metrics[s,56] <- try(mh18(data5), silent=TRUE)#53
+
+all_hyd_metrics <- as.data.frame(hyd_metrics)
+
+}
+
+
+
+hyd_metricsx <- na.omit(result) ## remove nas
+
+hyd_metrics <- hyd_metricsx[!duplicated(hyd_metricsx[,1]),] ## remove duplicates
+
+all_hyd_metrics <- as.data.frame(hyd_metrics) ## format into dataframe
+
+head(all_hyd_metrics) ## check data
+
+# 	site_no        X        Y   dh1  dh2  dh3  dh4  dh5  dl1  dl2  dl3  dl4  dl5
+# 1       X1 8.845833 54.90417 10.09 8.00 6.32 4.06 2.81 0.34 0.50 0.61 0.73 1.06
+# 3       X2 8.870833 54.90417  9.97 7.80 6.10 3.91 2.70 0.28 0.44 0.57 0.68 1.01
+# 6       X3 8.879167 54.90417  9.96 7.78 6.08 3.90 2.69 0.27 0.44 0.56 0.68 1.00
+# 10      X4 8.887500 54.90417  9.95 7.76 6.07 3.89 2.68 0.27 0.43 0.56 0.67 1.00
+# 15      X5 8.895833 54.90417  9.94 7.75 6.05 3.88 2.67 0.26 0.43 0.55 0.67 1.00
+# 21      X6 8.854167 54.89583 10.07 7.97 6.29 4.04 2.80 0.34 0.49 0.61 0.72 1.05
+
+stopCluster(cl) ## stop parallels
+
+
+save(all_hyd_metrics, file=paste(path, "sample_mets_1950.RData")) ## save file
+```
+
