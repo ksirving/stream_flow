@@ -77,9 +77,7 @@ IHA Metric description
 |metric__mh10__all_de|	MH10|	Mean maximum monthly flows	                      |Mean of the maximum monthly flows for all months	                                    |m3 s-1
 |metric__mh11__all_de|	MH11|	Mean maximum monthly flows	                      |Mean of the maximum monthly flows for all months	                                    |m3 s-1
 |metric__mh12__all_de|	MH12|	Mean maximum monthly flows	                      |Mean of the maximum monthly flows for all months	                                    |m3 s-1
-|metric__mh21__all_de|	MH21|	High flow volume	                                |Mean of the high flow volume (calculated as the area between the hydrograph and the
-                                                                              upper threshold during the high flow event) divided by median annual daily 
-                                                                              flow across all years. The upper threshold is defined as 1 times median annual flow|   days                                                                                                                                              
+|metric__mh21__all_de|	MH21|	High flow volume	                                |Mean of the high flow volume (calculated as the area between the hydrograph and the upper threshold during the high flow event) divided by median annual daily flow across all years. The upper threshold is defined as 1 times median annual flow|   days |                                                                                                                                             
 |metric__ml1__all_de|	  ML1|	  Mean minimum monthly flows	                     | Mean minimum monthly flow for all months	                                            |m3 s-1
 |metric__ml2__all_de|	  ML2|	  Mean minimum monthly flows	                     | Mean minimum monthly flow for all months	                                            |m3 s-1
 |metric__ml3__all_de|   ML3|	  Mean minimum monthly flows	                     | Mean minimum monthly flow for all months	                                            |m3 s-1
