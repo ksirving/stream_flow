@@ -52,7 +52,7 @@ metric__dl4__all_de	  DL4	  Annual minima of 30 day means of daily discharge	Mag
 metric__dl5__all_de	  DL5	  Annual minima of 90 day means of daily discharge	Magnitude of minimum annual flow of various duration, ranging from daily to seasonal	m3 s-1
 metric__ma1__all_de	  MA1	  Mean daily flows	                                Mean daily flows	                                                                    m3 s-1
 metric__ma2__all_de	  MA2	  Median daily flows	                              Median daily flows	                                                                  m3 s-1
-  metric__ma12__all_de	MA12	Mean monthly flows	                            Mean monthly flow for all months	                                                    m3 s-1
+ metric__ma12__all_de	MA12	Mean monthly flows	                              Mean monthly flow for all months	                                                    m3 s-1
 metric__ma13__all_de	MA13	Mean monthly flows	                              Mean monthly flow for all months	                                                    m3 s-1
 metric__ma14__all_de	MA14	Mean monthly flows	                              Mean monthly flow for all months	                                                    m3 s-1
 metric__ma15__all_de	MA15	Mean monthly flows	                              Mean monthly flow for all months	                                                    m3 s-1
