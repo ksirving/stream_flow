@@ -93,7 +93,6 @@ IHA Metric description
 |metric__ra1__all_de|	  RA1|	  Rise rate	                                       | Mean rate of positive changes in flow from one day to the next	                     | m3 s-1 d-1
 |metric__ra3__all_de|	  RA3|	  Fall rate	                                       | Mean rate of negative changes in flow from one day to the next	                      |m3 s-1 d-1
 |metric__ta1__all_de|	  TA1|	  Constancy	                                        |See Colwell (1974)	                                                                  |dimensionless
-|metric__ta2__all_de|	  TA2|	  Predictability of flow	                          |Composed of two independent, additive components: constancy 
-                                                                              (a measure of temporal invariance) and contingency (a measure of periodicity)	       | dimensionless
+|metric__ta2__all_de|	  TA2|	  Predictability of flow	                          |Composed of two independent, additivecomponents: constancy (a measure of temporal invariance) and contingency (a measure of periodicity)	       | dimensionless|
 
 
