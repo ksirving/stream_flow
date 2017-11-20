@@ -39,8 +39,8 @@ NoData value: -999 (Int4S)
 
 IHA Metric description
 
-|Filename|	            IHA|	 Metric|	                                          Description|	                                                                       unit|
-|---|----|----|---|
+           IHA|	 Metric|	                                          Description|	                                                                       unit|
+---|----|----|---|
 DH1|   Annual maxima of 1 day means of daily discharge|	 Magnitude of maximum annual flow of various duration, ranging from daily to seasonal|	m3 s-1
 DH2|	  Annual maxima of 3 day means of daily discharge|	  Magnitude of maximum annual flow of various duration, ranging from daily to seasonal|	m3 s-1
 DH3|	  Annual maxima of 7 day means of daily discharge|	  Magnitude of maximum annual flow of various duration, ranging from daily to seasonal|	m3 s-1
