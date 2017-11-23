@@ -26,16 +26,16 @@ NoData value: -999 (Int4S)<br />
 
 IHA metrics
 
-All 53 metrics are available as netCDF-4 files, where each layer contains one metric for the German stream network. 
+All 53 metrics are available as GEOTiff files, where each individual file contains one metric for the German stream network. 
 
 Extent: 5.866667, 15.03333, 47.29167, 54.90833  (xmin, xmax, ymin, ymax)
 
-Cell size: 0.0083333333 degree (30 arcsec)
-Projection: WGS84
-Number of columns: 1100
-Number of rows: 914
-Pixel type: Int4S 
-NoData value: -999 (Int4S) 
+Cell size: 0.0083333333 degree (30 arcsec)<br />
+Projection: WGS84<br />
+Number of columns: 1100<br />
+Number of rows: 914<br />
+Pixel type: Int4S <br />
+NoData value: -999 (Int4S)<br /> 
 
 IHA Metric description
 
