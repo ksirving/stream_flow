@@ -15,13 +15,13 @@ All 64 layers are available as netCDF-4 files, where each file contains one year
 
 Extent: 5.866667, 15.03333, 47.29167, 54.90833  (xmin, xmax, ymin, ymax)
 
-Cell size: 0.0083333333 degree (30 arcsec)
-Projection: WGS84
-Number of columns: 1100
-Number of rows: 914
-Number of layers: 365 or 366 if leap year
-Pixel type: Int4S 
-NoData value: -999 (Int4S) 
+Cell size: 0.0083333333 degree (30 arcsec)<br />
+Projection: WGS84<br />
+Number of columns: 1100<br />
+Number of rows: 914<br />
+Number of layers: 365 or 366 if leap year<br />
+Pixel type: Int4S<br />
+NoData value: -999 (Int4S)<br /> 
 
 
 IHA metrics
