@@ -1,0 +1,349 @@
+---
+title: "NetCDf format and calculate IHA metrics"
+output: html_notebook
+---
+
+<!-- Please download and reference IHA metrics from https://github.com/USGS-R/EflowStats --> 
+
+<!-- install R packages -->
+
+```{r}
+install.packages("data.table")
+install.packages("raster")
+install.packages("ncdf4")
+install.packages("dplyr")
+install.packages("doParallel")
+install.packages("foreach")
+install.packages("zoo")
+install.packages("chron")
+library(chron)
+library(data.table)
+library(raster)
+library(ncdf4)
+library(dplyr)
+library(doParallel)
+library(foreach)
+library(zoo)
+```
+
+<!-- set working directory  -->
+
+```{r}
+path <- "your_dir/here" ### change to your directory to where NetCDF files are stored
+setwd(path) 
+getwd()
+```
+<!-- make list of files and upload -->
+
+```{r}
+net_list <- list.files(pattern = "stack_all_de.r")
+head(net_list)
+
+n=1
+
+years <- seq(1950, 1954,1) ## change to years of interest
+
+
+#### first part of dataframe to get structure
+
+net <- brick(paste(path, net_list[n], sep = "/")) ## upload raster data
+
+
+yr <- years[n] ## define year
+
+
+### Add layer names. will display julian day & year
+names(net) <- paste0(c("day_"), yr , "_", sprintf("%03d", seq(1:length(names(net)))))
+
+dfx <- as(as(net, "SpatialPointsDataFrame"), "data.frame") ## format raster into df, takes a couple of minutes
+## flip data and unlist
+dfx <- t(dfx) 
+dfx <- data.frame(unlist(dfx))
+## separate df for coordinates
+coords <- dfx[(length(dfx[,1])-1):length(dfx[,1]),] 
+## take out coords from df and divide by 10000 to get real values
+dfx <- dfx[-c((length(dfx[,1])-1):length(dfx[,1])),]/10000 
+## add coords back into top of df
+dfx <- rbind(coords, dfx)
+```
+
+<!-- loops around files to add into main dataframe -->
+
+```{r}
+for(n in 2:length(net_list)) {
+
+	cat("Running year", n, "\n")
+
+net <- brick(paste(path, net_list[n], sep = "/")) ## upload each file
+
+yr <- years[n] # define year
+
+### Add layer names. will display julian day & year
+names(net) <- paste0(c("day_"), yr , "_", sprintf("%03d", seq(1:length(names(net)))))
+
+df <- as(as(net, "SpatialPointsDataFrame"), "data.frame")
+
+
+df <- t(df)## flip data 
+ 
+df <- data.frame(unlist(df))
+
+df <- df[-c((length(df[,1])-1):length(df[,1])),]/10000
+
+dfx <- rbind(dfx, df)
+
+}
+```
+<!-- check data -->
+
+```{r}
+dfx[1:10,1:10]
+```
+<!-- #    				X1        X2        X3       X4        X5        X6 -->
+<!-- # x             8.845833  8.870833  8.879167  8.88750  8.895833  8.854167 -->
+<!-- # y            54.904167 54.904167 54.904167 54.90417 54.904167 54.895833 -->
+<!-- # day_1950_001  0.860900  0.784500  0.778100  0.77170  0.765400  0.851300 -->
+<!-- # day_1950_002  0.821600  0.737000  0.730000  0.72290  0.715900  0.811100 -->
+<!-- # day_1950_003  0.798600  0.715200  0.708200  0.70130  0.694300  0.788200 -->
+<!-- # day_1950_004  1.653300  1.644600  1.643800  1.64310  1.642400  1.652200 -->
+<!-- # day_1950_005  1.878400  1.869000  1.868200  1.86740  1.866700  1.877300 -->
+<!-- # day_1950_006  1.345800  1.255000  1.247500  1.23990  1.232300  1.334500 -->
+<!-- # day_1950_007  1.631200  1.549000  1.542200  1.53530  1.528500  1.620900 -->
+<!-- # day_1950_008  1.548200  1.469600  1.463100  1.45650  1.450000  1.538400 -->
+
+<!-- add month, day and year columns -->
+
+```{r}
+## add year_val column
+dfx$year_val <- tstrsplit(rownames(dfx[-c(1:2)]), "[_]")[[2]]
+## add julian day column
+dfx$jul_day <- tstrsplit(rownames(dfx[-c(1:2)]), "[_]")[[3]] ## this julian day is continuous from origin. need annual jul day i.e. 1:365 for IHA calculations
+dfx$jul_day <- as.numeric(as.character(dfx$jul_day))
+
+## create separate df with julian days
+jul_day <- as.numeric(as.character(dfx$jul_day))
+
+## convert julian day to dates from origin day
+dates <- month.day.year(jul_day, origin.=c(month = 12, day = 31, year = 1949))
+
+## add month and day columns
+dfx$month_val <- dates$month
+dfx$day_val <- dates$day
+
+## add date column
+dfx$date <- as.Date(with(dfx, paste(year_val, month_val, day_val,sep="-")), "%Y-%m-%d")
+```
+<!-- add jul date (annual 1:365/6) and wy_val -->
+
+```{r}
+## julian date
+
+jul <- dfx
+jul$date3 <- as.Date(jul$date, format="%Y-%m-%d") ## format date
+jul_x<-jul$date3[1:length(jul$date3)] ## make list of dates
+z<-as.POSIXlt(jul_x , "%Y-%m-%d") ## format to UTC
+jul_day<-yday(z) ## change date to Julian day
+jul$jul_val2[1:length(jul$date)]<-jul_day ## add to df
+
+## format month and year columns
+jul$month_val <- as.numeric(as.character(jul$month_val))
+jul$year_val <- as.numeric(as.character(jul$year_val))
+
+## wy_val
+jul$wy_val <- ifelse(jul$month_val <= 9, jul$year_val, jul$year_val+1)
+
+sim <- jul
+
+## save if needed
+path <- "your_dir/here" ## change to directory where data is to be saved
+save(sim, file=paste(path,"sim_dis_1950_1954.RData")) ## change name 
+```
+<!-- ### data is now formatted for input into IHA metrics calulation as below -  -->
+
+<!-- # 				X85362 	year_val jul_day month_val day_val       date      date3 -->
+<!-- # x            10.22917       NA      NA        NA      NA       <NA>       <NA> -->
+<!-- # y            47.29583       NA      NA        NA      NA       <NA>       <NA> -->
+<!-- # day_1950_001  0.54640     1950       1         1       1 1950-01-01 1950-01-01 -->
+<!-- # day_1950_002  0.47330     1950       2         1       2 1950-01-02 1950-01-02 -->
+<!-- # day_1950_003  0.45510     1950       3         1       3 1950-01-03 1950-01-03 -->
+<!-- #              jul_val2 wy_val -->
+<!-- # x                  NA     NA -->
+<!-- # y                  NA     NA -->
+<!-- # day_1950_001        1   1950 -->
+<!-- # day_1950_002        2   1950 -->
+<!-- # day_1950_003        3   1950 -->
+
+<!-- IHA metrics calculation -->
+
+<!-- please load the IHA metrics functions from EFlowstats before running the below script -->
+
+```{r}
+cols <- unique(names(sim[-c( 85363:85370)])) ##  define list of sites, do not include the columns: month_val, year_val, day_val, date, date3, jul_val, wy_val. the numbers will need adjusted according to the size of dataframe
+head(cols) ## check data
+tail(cols) ## check columns are removed
+```
+<!-- loop for all 53 IHA metrics -->
+
+```{r}
+cl <- makePSOCKcluster(10, outfile="")
+registerDoParallel(cl)
+getDoParWorkers()
+
+# for(s in 1:length(cols)) { ## start loop with single processing
+result <- foreach(s=1:length(cols), .combine = rbind, .packages=c("data.table", "dplyr", "zoo")) %dopar% { ## start loop for parallel processing
+
+  cat("Running site", s, "\n")
+
+	sx <- paste("^",cols[s],"$", sep="") ## define site within object
+
+  hyd_metrics <- data.frame(matrix(nrow = 0, ncol = 56)) ## define dataframe & column names
+  colnames(hyd_metrics)<-(c("site_no", "X", "Y", "dh1","dh2","dh3","dh4","dh5","dl1", "dl2", "dl3", "dl4", "dl5", "ma1", "ma2", "ma12", "ma13", "ma14", "ma15", "ma16", "ma17", "ma18", "ma19", "ma20", "ma21", "ma22", "ma23", "mh1", "mh2", "mh3", "mh4", "mh5", "mh6", "mh7", "mh8", "mh9", "mh10", "mh11", "mh12", "ra1", "ra3","ta1", "ta2","ml1","ml2","ml3","ml4","ml5","ml6","ml7","ml8","ml9","ml10","ml11","ml12","mh18"))
+
+  
+  
+  data1 <- sim[,grep(sx, colnames(sim))] ## extract discharge data for site sx
+  
+  data2 <- cbind(data1,sim[,101:108]) # 1 site data + dates etc
+ 
+
+  date <- "31.12.1954" ## last day (change to last day in data)
+  date <- as.Date(date, format="%d.%m.%Y")
+
+  data3=data2[-c(1:2),] # to remove unimportant rows
+  
+  colnames(data3)[1] <- "discharge" ## change column name to discharge
+  data3 <-data3 %>% distinct(date3, .keep_all = TRUE) ## remove duplicated dates
+  data4 <- data3[order(data3$date3),] ## order df by dates
+
+  
+
+  data4$discharge<-as.numeric(as.character(data4$discharge)) ## change format to number
+  
+  date.seq <- data.frame("date" = seq.Date((date-1825), date, by="days")) ## define dates sequence 01/01/1050 - 31/12/2013
+
+  data5 <- na.omit(data4) ## remove NAs
+    
+  hyd_metrics[s,1] <- cols[s] ## site no
+  hyd_metrics[s,2] <- as.numeric(as.character(data2[1,1]))#tstrsplit(cols[s], "[_]")[[1]]                   
+  hyd_metrics[s,3] <- as.numeric(as.character(data2[2,1]))#tstrsplit(cols[s], "[_]")[[2]]    
+
+#### dh stats    
+
+hyd_metrics[s,4] <- try(dh1(data5, pref = "mean"), silent=TRUE)#1
+hyd_metrics[s,5] <- try(dh2(data5, pref = "mean"), silent=TRUE)#2
+hyd_metrics[s,6] <- try(dh3(data5, pref = "mean"), silent=TRUE)#3
+hyd_metrics[s,7] <- try(dh4(data5, pref = "mean"), silent=TRUE)#4
+hyd_metrics[s,8] <- try(dh5(data5, pref = "mean"), silent=TRUE)#5
+
+
+
+# # ######### DL stats
+
+hyd_metrics[s,9] <- try(dl1(data5, pref = "mean"), silent=TRUE)#6
+hyd_metrics[s,10] <- try(dl2(data5, pref = "mean"), silent=TRUE)#7
+hyd_metrics[s,11] <- try(dl3(data5, pref = "mean"), silent=TRUE)#8
+hyd_metrics[s,12] <- try(dl4(data5, pref = "mean"), silent=TRUE)#9
+hyd_metrics[s,13] <- try(dl5(data5, pref = "mean"), silent=TRUE)#10
+
+
+
+
+# ############# MA stats
+
+hyd_metrics[s,14] <- try(ma1(data5), silent=TRUE)#11
+hyd_metrics[s,15] <- try(ma2(data5), silent=TRUE)#12
+
+hyd_metrics[s,16] <- try(unlist(ma12.23(data5)), silent=TRUE)[1]#13
+hyd_metrics[s,17] <- try(unlist(ma12.23(data5)), silent=TRUE)[2]#14
+hyd_metrics[s,18] <- try(unlist(ma12.23(data5)), silent=TRUE)[3]#15
+hyd_metrics[s,19] <- try(unlist(ma12.23(data5)), silent=TRUE)[4]#16
+hyd_metrics[s,20] <- try(unlist(ma12.23(data5)), silent=TRUE)[5]#17
+hyd_metrics[s,21] <- try(unlist(ma12.23(data5)), silent=TRUE)[6]#18
+hyd_metrics[s,22] <- try(unlist(ma12.23(data5)), silent=TRUE)[7]#19
+hyd_metrics[s,23] <- try(unlist(ma12.23(data5)), silent=TRUE)[8]#20
+hyd_metrics[s,24] <- try(unlist(ma12.23(data5)), silent=TRUE)[9]#21
+hyd_metrics[s,25] <- try(unlist(ma12.23(data5)), silent=TRUE)[10]#22
+hyd_metrics[s,26] <- try(unlist(ma12.23(data5)), silent=TRUE)[11]#23
+hyd_metrics[s,27] <- try(unlist(ma12.23(data5)), silent=TRUE)[12]#24
+
+############# MH stats
+
+hyd_metrics[s,28] <- try(unlist(mh1.12(data5)), silent=TRUE)[1]#25
+hyd_metrics[s,29] <- try(unlist(mh1.12(data5)), silent=TRUE)[2]#26
+hyd_metrics[s,30] <- try(unlist(mh1.12(data5)), silent=TRUE)[3]#27
+hyd_metrics[s,31] <- try(unlist(mh1.12(data5)), silent=TRUE)[4]#28
+hyd_metrics[s,32] <- try(unlist(mh1.12(data5)), silent=TRUE)[5]#29
+hyd_metrics[s,33] <- try(unlist(mh1.12(data5)), silent=TRUE)[6]#30
+hyd_metrics[s,34] <- try(unlist(mh1.12(data5)), silent=TRUE)[7]#31
+hyd_metrics[s,35] <- try(unlist(mh1.12(data5)), silent=TRUE)[8]#32
+hyd_metrics[s,36] <- try(unlist(mh1.12(data5)), silent=TRUE)[9]#33
+hyd_metrics[s,37] <- try(unlist(mh1.12(data5)), silent=TRUE)[10]#34
+hyd_metrics[s,38] <- try(unlist(mh1.12(data5)), silent=TRUE)[11]#35
+hyd_metrics[s,39] <- try(unlist(mh1.12(data5)), silent=TRUE)[12]#36
+
+
+############# RA stats
+
+hyd_metrics[s,40] <- try(ra1(data5), silent=TRUE)#37
+hyd_metrics[s,41] <- try(ra3(data5), silent=TRUE)#38
+
+
+
+############# TA stats
+
+hyd_metrics[s,42] <- try(unlist(ta1.2(data5)), silent=TRUE)[1]#39
+hyd_metrics[s,43] <- try(unlist(ta1.2(data5)), silent=TRUE)[2]#40
+
+
+############# ml stats
+
+hyd_metrics[s,44] <- try(unlist(ml1.12(data5)), silent=TRUE)[1]#41
+hyd_metrics[s,45] <- try(unlist(ml1.12(data5)), silent=TRUE)[2]#42 
+hyd_metrics[s,46] <- try(unlist(ml1.12(data5)), silent=TRUE)[3]#43
+hyd_metrics[s,47] <- try(unlist(ml1.12(data5)), silent=TRUE)[4]#44
+hyd_metrics[s,48] <- try(unlist(ml1.12(data5)), silent=TRUE)[5]#45
+hyd_metrics[s,49] <- try(unlist(ml1.12(data5)), silent=TRUE)[6]#46
+hyd_metrics[s,50] <- try(unlist(ml1.12(data5)), silent=TRUE)[7]#47
+hyd_metrics[s,51] <- try(unlist(ml1.12(data5)), silent=TRUE)[8]#48
+hyd_metrics[s,52] <- try(unlist(ml1.12(data5)), silent=TRUE)[9]#49
+hyd_metrics[s,53] <- try(unlist(ml1.12(data5)), silent=TRUE)[10]#50
+hyd_metrics[s,54] <- try(unlist(ml1.12(data5)), silent=TRUE)[11]#51
+hyd_metrics[s,55] <- try(unlist(ml1.12(data5)), silent=TRUE)[12]#52
+
+
+###### mh stats
+
+hyd_metrics[s,56] <- try(mh18(data5), silent=TRUE)#53
+
+all_hyd_metrics <- as.data.frame(hyd_metrics)
+
+}
+
+
+
+hyd_metricsx <- na.omit(result) ## remove nas
+
+hyd_metrics <- hyd_metricsx[!duplicated(hyd_metricsx[,1]),] ## remove duplicates
+
+all_hyd_metrics <- as.data.frame(hyd_metrics) ## format into dataframe
+
+head(all_hyd_metrics) ## check data
+
+# 	site_no        X        Y   dh1  dh2  dh3  dh4  dh5  dl1  dl2  dl3  dl4  dl5
+# 1       X1 8.845833 54.90417 10.09 8.00 6.32 4.06 2.81 0.34 0.50 0.61 0.73 1.06
+# 3       X2 8.870833 54.90417  9.97 7.80 6.10 3.91 2.70 0.28 0.44 0.57 0.68 1.01
+# 6       X3 8.879167 54.90417  9.96 7.78 6.08 3.90 2.69 0.27 0.44 0.56 0.68 1.00
+# 10      X4 8.887500 54.90417  9.95 7.76 6.07 3.89 2.68 0.27 0.43 0.56 0.67 1.00
+# 15      X5 8.895833 54.90417  9.94 7.75 6.05 3.88 2.67 0.26 0.43 0.55 0.67 1.00
+# 21      X6 8.854167 54.89583 10.07 7.97 6.29 4.04 2.80 0.34 0.49 0.61 0.72 1.05
+
+stopCluster(cl) ## stop parallels
+
+
+save(all_hyd_metrics, file=paste(path, "sample_metrics.RData")) ## save file
+
+```
+
+
+
+
